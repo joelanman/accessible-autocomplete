@@ -1,5 +1,6 @@
 import { createElement, Component } from 'preact' /** @jsx createElement */
 import Status from './status'
+import DropdownArrowDown from './dropdown-arrow-down'
 
 const IS_PREACT = process.env.COMPONENT_LIBRARY === 'PREACT'
 const IS_REACT = process.env.COMPONENT_LIBRARY === 'REACT'
@@ -7,6 +8,7 @@ const IS_REACT = process.env.COMPONENT_LIBRARY === 'REACT'
 const keyCodes = {
   13: 'enter',
   27: 'escape',
+  32: 'space',
   38: 'up',
   40: 'down'
 }
@@ -51,6 +53,7 @@ export default class Autocomplete extends Component {
     onConfirm: () => {},
     confirmOnBlur: true,
     showNoOptionsFound: true,
+    showAllValues: false,
     required: false
   }
 
@@ -197,16 +200,21 @@ export default class Autocomplete extends Component {
   }
 
   handleInputChange (evt) {
-    const { minLength, source } = this.props
+    const { minLength, source, showAllValues } = this.props
     const autoselect = this.hasAutoselect()
     const query = evt.target.value
     const queryEmpty = query.length === 0
     const queryChanged = this.state.query.length !== query.length
     const queryLongEnough = query.length >= minLength
 
+    // // if minLength === 0, space opens the dropdown so remove it from the input
+    // if (minLength === 0 && query === ' ') {
+    //   query = evt.target.value = ''
+    // }
+
     this.setState({ query })
 
-    const searchForOptions = !queryEmpty && queryChanged && queryLongEnough
+    const searchForOptions = showAllValues || (!queryEmpty && queryChanged && queryLongEnough)
     if (searchForOptions) {
       source(query, (options) => {
         const optionsAvailable = options.length > 0
@@ -222,6 +230,10 @@ export default class Autocomplete extends Component {
         options: []
       })
     }
+  }
+
+  handleInputClick (evt) {
+    this.handleInputChange(evt)
   }
 
   handleInputFocus (evt) {
@@ -288,11 +300,36 @@ export default class Autocomplete extends Component {
 
   handleDownArrow (evt) {
     evt.preventDefault()
-    const { menuOpen, options, selected } = this.state
-    const isNotAtBottom = selected !== options.length - 1
-    const allowMoveDown = isNotAtBottom && menuOpen
-    if (allowMoveDown) {
-      this.handleOptionFocus(selected + 1)
+    // if not open, open
+    if (this.props.showAllValues && this.state.menuOpen === false) {
+      evt.preventDefault()
+      this.props.source('', (options) => {
+        this.setState({
+          menuOpen: true,
+          options,
+          selected: 0
+        })
+      })
+    } else if (this.state.menuOpen === true) {
+      const { menuOpen, options, selected } = this.state
+      const isNotAtBottom = selected !== options.length - 1
+      const allowMoveDown = isNotAtBottom && menuOpen
+      if (allowMoveDown) {
+        this.handleOptionFocus(selected + 1)
+      }
+    }
+  }
+
+  handleSpace (evt) {
+    // if not open, open
+    if (this.props.showAllValues && this.state.menuOpen === false) {
+      evt.preventDefault()
+      this.props.source('', (options) => {
+        this.setState({
+          menuOpen: true,
+          options
+        })
+      })
     }
   }
 
@@ -322,6 +359,9 @@ export default class Autocomplete extends Component {
       case 'down':
         this.handleDownArrow(evt)
         break
+      case 'space':
+        this.handleSpace(evt)
+        break
       case 'enter':
         this.handleEnter(evt)
         break
@@ -339,7 +379,7 @@ export default class Autocomplete extends Component {
   }
 
   render () {
-    const { cssNamespace, displayMenu, id, minLength, name, placeholder, required } = this.props
+    const { cssNamespace, displayMenu, id, minLength, name, placeholder, required, showAllValues } = this.props
     const { focused, hovered, menuOpen, options, query, selected } = this.state
     const autoselect = this.hasAutoselect()
 
@@ -355,6 +395,8 @@ export default class Autocomplete extends Component {
     const inputClassName = `${cssNamespace}__input`
     const componentIsFocused = focused !== null
     const inputModFocused = componentIsFocused ? ` ${inputClassName}--focused` : ''
+    const inputModType = this.props.showAllValues ? ` ${inputClassName}--show-all-values` : ` ${inputClassName}--default`
+    const dropdownArrowClassName = `${cssNamespace}__dropdown-arrow-down`
     const optionFocused = focused !== -1 && focused !== null
 
     const menuClassName = `${cssNamespace}__menu`
@@ -391,8 +433,9 @@ export default class Autocomplete extends Component {
           aria-expanded={menuOpen}
           aria-owns={`${id}__listbox`}
           autoComplete='off'
-          className={`${inputClassName}${inputModFocused}`}
+          className={`${inputClassName}${inputModFocused}${inputModType}`}
           id={id}
+          onClick={(evt) => this.handleInputClick(evt)}
           onBlur={this.handleInputBlur}
           {...onChangeCrossLibrary(this.handleInputChange)}
           onFocus={this.handleInputFocus}
@@ -404,6 +447,10 @@ export default class Autocomplete extends Component {
           required={required}
           value={query}
         />
+
+        {showAllValues && (
+          <DropdownArrowDown className={dropdownArrowClassName} />
+        )}
 
         <ul
           className={`${menuClassName} ${menuModDisplayMenu} ${menuModVisibility}`}
